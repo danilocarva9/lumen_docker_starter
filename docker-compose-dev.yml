@@ -1,0 +1,87 @@
+version: '3'
+
+#Networks
+networks:
+  api_network:
+    driver: bridge
+  queue_network:
+    driver: bridge
+#Services
+services:
+  #Application
+  api:
+    build:
+      args:
+        user: laravel
+        uid: 1000
+        gid: 1000
+      context: ./docker
+      dockerfile: php.dockerfile
+    container_name: api
+    volumes:
+      - ./src/server:/var/www/html:delegated
+    environment:
+      - "DB_HOST=database"
+      - "DB_PORT=3306"
+      - "DB_DATABASE=homestead"
+      - "DB_USERNAME=homestead"
+      - "DB_PASSWORD=secret"
+      - "CACHE_DRIVER=redis"
+      - "REDIS_CLIENT=predis"
+      - "REDIS_HOST=app_redis"
+      - "REDIS_PASSWORD=null"
+      - "REDIS_PORT=6379"
+    networks:
+      - api_network
+  #Server
+  web:
+    build:
+      args:
+        user: laravel
+        uid: 1000
+        gid: 1000
+      context: ./docker
+      dockerfile: nginx.dockerfile
+    restart: unless-stopped
+    container_name: web
+    ports:
+      - "8000:80"
+    volumes:
+      - ./src/server:/var/www/html:delegated
+    depends_on:
+      - api
+      - database
+    networks:
+      - api_network
+  #Database
+  database:
+    #image: mysql
+    image: arm64v8/mysql:oracle #mysql image for mac m1 Silicon Valley support
+    container_name: database
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./docker/volumes/mysql:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: homestead
+      MYSQL_USER: homestead
+      MYSQL_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: secret
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    networks:
+      - api_network
+  #Caching
+  redis:
+    build:
+      context: ./docker
+      dockerfile: redis.dockerfile
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./docker/volumes/redis:/data
+    networks:
+      - queue_network
